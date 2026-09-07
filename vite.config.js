@@ -7737,6 +7737,16 @@ export default defineConfig(({ mode }) => {
   }
   const env = { ...process.env };
   const localAllowedHosts = ['localhost', '127.0.0.1', '.local'];
+  const configuredFrameAncestors = String(env.GEV_FRAME_ANCESTORS || '')
+    .split(/\s+/)
+    .map((value) => value.trim())
+    .filter((value) => /^https?:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(value));
+  const appFrameHeaders = configuredFrameAncestors.length
+    ? { 'Content-Security-Policy': `frame-ancestors ${configuredFrameAncestors.join(' ')}` }
+    : {
+        'X-Frame-Options': 'DENY',
+        'Content-Security-Policy': "frame-ancestors 'none'",
+      };
   return {
     plugins: [
       cesium(),
@@ -7779,10 +7789,10 @@ export default defineConfig(({ mode }) => {
       // app issue a perfectly same-origin credential write that passes every
       // Host/Origin check. These headers apply to everything this dev server
       // serves, which is what makes that attack impossible rather than unlikely.
-      headers: {
-        'X-Frame-Options': 'DENY',
-        'Content-Security-Policy': "frame-ancestors 'none'",
-      },
+      // Embedding remains denied by default. A trusted host such as The O can
+      // be explicitly allowlisted without weakening the credential endpoints,
+      // which keep their own DENY headers above.
+      headers: appFrameHeaders,
     },
     // Expose selected API keys to the browser via import.meta.env.*
     define: {
