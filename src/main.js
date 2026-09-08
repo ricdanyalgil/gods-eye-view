@@ -328,6 +328,45 @@ async function init() {
     };
     window.__godsEyeView.voiceCommands = initGevVoiceCommands({ viewer, styleManager, dataManager, sceneDirector, annotations });
 
+    const missionControls = document.getElementById('mission-map-controls');
+    const missionFocusButton = missionControls?.querySelector('[data-mission-focus]');
+    let missionStopEntities = [];
+    const setMissionFocusMode = (enabled) => {
+      document.body.classList.toggle('the-o-route-focus', enabled);
+      missionFocusButton?.setAttribute('aria-pressed', String(enabled));
+      missionFocusButton?.setAttribute('aria-label', enabled ? 'Restore map interface' : 'Minimise map interface');
+    };
+    const fitMissionRoute = () => {
+      if (!missionStopEntities.length) return;
+      viewer.flyTo(missionStopEntities, { duration: 0.85, offset: new Cesium.HeadingPitchRange(0, -0.72, 0) });
+    };
+    missionControls?.querySelectorAll('[data-mission-zoom]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const height = Math.max(200, Number(viewer.camera.positionCartographic?.height) || 2000);
+        const amount = Math.max(120, height * 0.38);
+        if (button.dataset.missionZoom === 'in') viewer.camera.moveForward(amount);
+        else viewer.camera.moveBackward(amount);
+        governorRequestRender('mission-route-zoom');
+      });
+    });
+    missionControls?.querySelector('[data-mission-fit]')?.addEventListener('click', fitMissionRoute);
+    missionFocusButton?.addEventListener('click', () => setMissionFocusMode(!document.body.classList.contains('the-o-route-focus')));
+
+    // Annotation callouts are screen-space artwork. Back them with generously
+    // sized, nearly transparent Cesium points so clicking a visible mission
+    // stop focuses the camera on that exact arrival, hotel or destination.
+    const missionPickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    missionPickHandler.setInputAction((click) => {
+      const picked = viewer.scene.pick(click.position);
+      const point = picked?.id?.theOMissionStop;
+      if (!point) return;
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(point.longitude, point.latitude, 2200),
+        orientation: { heading: 0, pitch: Cesium.Math.toRadians(-48), roll: 0 },
+        duration: 0.8,
+      });
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
     // The trusted parent console (The O) can operate the embedded camera
     // without reaching through the cross-origin iframe boundary. Framing is
     // already restricted by GEV_FRAME_ANCESTORS; source validation below makes
@@ -382,6 +421,25 @@ async function init() {
             label: point.label,
             color: point.kind === 'risk' ? 'red' : index === 0 ? 'cyan' : index === points.length - 1 ? 'amber' : 'warning',
           }))], { clearPrevious: true, persist: true, flyTo: true });
+          missionStopEntities.forEach((entity) => viewer.entities.remove(entity));
+          missionStopEntities = points
+            .filter((point) => Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
+            .map((point) => {
+              const entity = viewer.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(point.longitude, point.latitude),
+                point: {
+                  pixelSize: 46,
+                  color: Cesium.Color.WHITE.withAlpha(0.01),
+                  outlineColor: Cesium.Color.WHITE.withAlpha(0.01),
+                  outlineWidth: 1,
+                  disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                },
+              });
+              entity.theOMissionStop = point;
+              return entity;
+            });
+          if (missionControls) missionControls.hidden = false;
+          if (window.self !== window.top) setMissionFocusMode(true);
           const routeResult = result?.results?.[0];
           event.source?.postMessage?.({
             type: 'the-o-eye:route-state',

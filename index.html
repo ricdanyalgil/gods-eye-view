@@ -25,7 +25,7 @@
   <!-- Title -->
   <div id="title-bar">
     <div class="title-glow"></div>
-    <h1><span class="title-logo brand-logo" data-logo-gaze data-logo-src="/logo.svg" aria-hidden="true"><img src="/logo.svg" alt="" /></span> <span>THE O <span class="title-accent">EYE</span></span></h1>
+    <h1><span class="title-logo brand-logo" aria-hidden="true"><img src="/the-o-mark.png" alt="" /></span> <span>THE O</span></h1>
     <p class="subtitle">OPERATIONAL INTELLIGENCE · LIVE</p>
   </div>
 
@@ -907,6 +907,13 @@
     </div>
     <p class="key-setup-note" data-key-setup-status role="status" aria-live="polite">The Google Maps key buys the photorealistic planet — everything else stacks on top.</p>
   </aside>
+
+  <nav id="mission-map-controls" hidden aria-label="Mission route map controls">
+    <button type="button" data-mission-zoom="out" aria-label="Zoom out from the route" title="Zoom out">−</button>
+    <button type="button" data-mission-fit aria-label="Fit the complete mission route" title="Show complete route">⌖</button>
+    <button type="button" data-mission-zoom="in" aria-label="Zoom in on the route" title="Zoom in">+</button>
+    <button type="button" data-mission-focus aria-pressed="true" aria-label="Restore map interface" title="Show or hide map interface">◉</button>
+  </nav>
 
   <!-- Intelligence HUD Overlay -->
   <div id="intel-hud"></div>

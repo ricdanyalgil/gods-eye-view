@@ -517,7 +517,7 @@ body.cockpit-mode #cockpit-cloud-effects.active {
 }
 
 .brand-logo {
-  aspect-ratio: 775 / 520;
+  aspect-ratio: 1;
   overflow: visible;
   pointer-events: none;
 }
@@ -7205,6 +7205,57 @@ body.recording-mode #command-dock {
   visibility: hidden !important;
   pointer-events: none !important;
 }
+
+/* Embedded mission view: preserve the operational route, its compact camera
+   controls and the shared voice channel while removing non-essential chrome. */
+#mission-map-controls {
+  position: fixed;
+  z-index: 190;
+  top: 20px;
+  left: 50%;
+  display: flex;
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid rgba(123, 189, 211, .28);
+  border-radius: 999px;
+  background: rgba(9, 18, 27, .82);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .42);
+  backdrop-filter: blur(18px);
+  transform: translateX(-50%);
+}
+#mission-map-controls[hidden] { display: none !important; }
+#mission-map-controls button {
+  width: 35px;
+  height: 35px;
+  border: 1px solid rgba(123, 189, 211, .22);
+  border-radius: 50%;
+  background: rgba(18, 31, 43, .86);
+  color: rgba(223, 242, 247, .9);
+  font: 600 18px/1 var(--font-mono);
+  cursor: pointer;
+}
+#mission-map-controls button:hover,
+#mission-map-controls button:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+body.the-o-route-focus #title-bar,
+body.the-o-route-focus #style-indicator,
+body.the-o-route-focus #top-center-actions,
+body.the-o-route-focus #right-context-rail,
+body.the-o-route-focus #intel-hud,
+body.the-o-route-focus #key-setup-chip,
+body.the-o-route-focus #command-dock > #location-bar,
+body.the-o-route-focus #command-dock > #control-panel { display: none !important; }
+body.the-o-route-focus #command-dock {
+  width: min(230px, calc(100vw - 28px));
+  grid-template-areas: 'voice';
+  grid-template-columns: 1fr;
+  padding: 4px;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+body.the-o-route-focus #command-dock > #gev-voice-control { margin: 0; }
+body.the-o-route-focus #cesium-credits { bottom: 24px; }
 
 body.ui-clean-view #cesium-credits,
 body.recording-mode #cesium-credits {
