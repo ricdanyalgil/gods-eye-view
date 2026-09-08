@@ -343,6 +343,8 @@ async function init() {
               target,
               label: String(typeof point === 'object' ? point?.label || target : target).trim().slice(0, 120),
               kind: String(typeof point === 'object' ? point?.kind || 'stop' : 'stop').trim().slice(0, 24),
+              latitude: Number.isFinite(Number(typeof point === 'object' ? point?.latitude : null)) ? Number(point.latitude) : undefined,
+              longitude: Number.isFinite(Number(typeof point === 'object' ? point?.longitude : null)) ? Number(point.longitude) : undefined,
             };
           })
           .filter(Boolean)
@@ -369,12 +371,14 @@ async function init() {
           const result = await annotations.annotate([{
             type: 'route',
             label: String(event.data?.label || 'ILLUSTRATIVE PUBLIC ROUTE').slice(0, 120),
-            points: points.map(({ target }) => ({ target })),
+            points: points.map(({ target, latitude, longitude }) => ({ target, latitude, longitude })),
             mode: ['walking', 'cycling', 'driving'].includes(event.data?.mode) ? event.data.mode : 'driving',
             color: 'warning',
           }, ...points.map((point, index) => ({
             type: 'pin',
             target: point.target,
+            latitude: point.latitude,
+            longitude: point.longitude,
             label: point.label,
             color: point.kind === 'risk' ? 'red' : index === 0 ? 'cyan' : index === points.length - 1 ? 'amber' : 'warning',
           }))], { clearPrevious: true, persist: true, flyTo: true });
