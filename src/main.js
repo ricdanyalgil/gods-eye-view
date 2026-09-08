@@ -30,7 +30,7 @@ import {
   holdContinuousRender,
   releaseContinuousRender,
 } from './renderGovernor.js';
-import { installScopeMask } from './scopeMask.js';
+import { installScopeMask, setScopeMaskEnabled } from './scopeMask.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
 import { initKeySetup } from './keySetup.js';
 import { loadPhotorealisticTileset } from './mapStartup.js';
@@ -331,14 +331,22 @@ async function init() {
     const missionControls = document.getElementById('mission-map-controls');
     const missionFocusButton = missionControls?.querySelector('[data-mission-focus]');
     let missionStopEntities = [];
+    let missionRouteCoordinates = [];
     const setMissionFocusMode = (enabled) => {
       document.body.classList.toggle('the-o-route-focus', enabled);
       missionFocusButton?.setAttribute('aria-pressed', String(enabled));
       missionFocusButton?.setAttribute('aria-label', enabled ? 'Restore map interface' : 'Minimise map interface');
     };
     const fitMissionRoute = () => {
-      if (!missionStopEntities.length) return;
-      viewer.flyTo(missionStopEntities, { duration: 0.85, offset: new Cesium.HeadingPitchRange(0, -0.72, 0) });
+      const positions = missionRouteCoordinates.map((point) =>
+        Cesium.Cartesian3.fromDegrees(point.longitude, point.latitude)
+      );
+      if (positions.length < 2) return;
+      const sphere = Cesium.BoundingSphere.fromPoints(positions);
+      viewer.camera.flyToBoundingSphere(sphere, {
+        duration: 0.85,
+        offset: new Cesium.HeadingPitchRange(0, -0.82, Math.max(7000, sphere.radius * 3.1)),
+      });
     };
     missionControls?.querySelectorAll('[data-mission-zoom]').forEach((button) => {
       button.addEventListener('click', () => {
@@ -374,6 +382,7 @@ async function init() {
     window.addEventListener('message', (event) => {
       if (event.source !== window.parent) return;
       if (event.data?.type === 'the-o-eye:annotate-route') {
+        const focusLocked = event.data?.focusMode === 'locked';
         const points = (Array.isArray(event.data?.points) ? event.data.points : [])
           .map((point) => {
             const target = String(typeof point === 'object' ? point?.target : point || '').trim().slice(0, 200);
@@ -392,6 +401,7 @@ async function init() {
         if (points.length < 2) return;
         const drawMissionRoute = async () => {
           let cctvEnabled = false;
+          let trafficEnabled = false;
           const routeText = points.map(({ target }) => target.toLowerCase()).join(' ');
           const publicCameraCoverage = [
             'austin', 'london', 'los angeles', 'san diego', 'san francisco',
@@ -406,6 +416,18 @@ async function init() {
             cctvEnabled = await dataManager.setEnabled('cctv', true, { origin: 'programmatic' });
           } else if (event.data?.enableCameras === true) {
             await dataManager.setEnabled('cctv', false, { origin: 'programmatic' });
+          }
+          if (event.data?.enableTraffic === true) {
+            try {
+              const trafficStatus = await fetch('/api/tomtom/status').then((response) => response.ok ? response.json() : null);
+              if (trafficStatus?.hasKey) {
+                trafficEnabled = await dataManager.setEnabled('traffic', true, { origin: 'programmatic' });
+              } else {
+                await dataManager.setEnabled('traffic', false, { origin: 'programmatic' });
+              }
+            } catch {
+              await dataManager.setEnabled('traffic', false, { origin: 'programmatic' });
+            }
           }
           const result = await annotations.annotate([{
             type: 'route',
@@ -423,10 +445,14 @@ async function init() {
           }))], { clearPrevious: true, persist: true, flyTo: true });
           missionStopEntities.forEach((entity) => viewer.entities.remove(entity));
           missionStopEntities = points
-            .filter((point) => Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
-            .map((point) => {
+            .map((point, index) => {
+              const resolved = result?.results?.[index + 1];
+              const latitude = Number.isFinite(point.latitude) ? point.latitude : Number(resolved?.latitude);
+              const longitude = Number.isFinite(point.longitude) ? point.longitude : Number(resolved?.longitude);
+              if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+              const exactPoint = { ...point, latitude, longitude };
               const entity = viewer.entities.add({
-                position: Cesium.Cartesian3.fromDegrees(point.longitude, point.latitude),
+                position: Cesium.Cartesian3.fromDegrees(longitude, latitude),
                 point: {
                   pixelSize: 46,
                   color: Cesium.Color.WHITE.withAlpha(0.01),
@@ -435,16 +461,22 @@ async function init() {
                   disableDepthTestDistance: Number.POSITIVE_INFINITY,
                 },
               });
-              entity.theOMissionStop = point;
+              entity.theOMissionStop = exactPoint;
               return entity;
-            });
+            })
+            .filter(Boolean);
+          missionRouteCoordinates = missionStopEntities.map((entity) => entity.theOMissionStop);
           if (missionControls) missionControls.hidden = false;
-          if (window.self !== window.top) setMissionFocusMode(true);
+          if (missionFocusButton) missionFocusButton.hidden = focusLocked;
+          if (focusLocked) setScopeMaskEnabled(false);
+          if (focusLocked || window.self !== window.top) setMissionFocusMode(true);
+          window.setTimeout(fitMissionRoute, 120);
           const routeResult = result?.results?.[0];
           event.source?.postMessage?.({
             type: 'the-o-eye:route-state',
             result: { ...result, ok: routeResult?.ok === true },
             cctvEnabled,
+            trafficEnabled,
           }, event.origin);
         };
         drawMissionRoute().catch(() => {

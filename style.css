@@ -7239,11 +7239,14 @@ body.recording-mode #command-dock {
 body.the-o-route-focus #title-bar,
 body.the-o-route-focus #style-indicator,
 body.the-o-route-focus #top-center-actions,
+body.the-o-route-focus #view-switcher,
+body.the-o-route-focus #left-panel-stack,
 body.the-o-route-focus #right-context-rail,
 body.the-o-route-focus #intel-hud,
 body.the-o-route-focus #key-setup-chip,
 body.the-o-route-focus #command-dock > #location-bar,
 body.the-o-route-focus #command-dock > #control-panel { display: none !important; }
+body.the-o-route-focus #scope-mask { display: none !important; }
 body.the-o-route-focus #command-dock {
   width: min(230px, calc(100vw - 28px));
   grid-template-areas: 'voice';

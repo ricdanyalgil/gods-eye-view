@@ -25,7 +25,7 @@
   <!-- Title -->
   <div id="title-bar">
     <div class="title-glow"></div>
-    <h1><span class="title-logo brand-logo" aria-hidden="true"><img src="/the-o-mark.png" alt="" /></span> <span>THE O</span></h1>
+    <h1 aria-label="The O"><span class="title-logo brand-logo" aria-hidden="true"><img src="/the-o-mark.png" alt="" /></span></h1>
     <p class="subtitle">OPERATIONAL INTELLIGENCE · LIVE</p>
   </div>
 
@@ -879,7 +879,7 @@
     </div>
     <!-- Kept out of the footer row: it swaps to mission progress and errors, and
          a live region that also holds layout makes the row jump as it speaks. -->
-    <p class="first-run-note" data-first-run-status role="status" aria-live="polite">Tip: the THE O EYE MIC button lets you talk to the map.</p>
+    <p class="first-run-note" data-first-run-status role="status" aria-live="polite">Tip: the THE O MIC button lets you talk to the map.</p>
   </aside>
 
   <!-- POWER UP — in-app key setup. Dev-server only: src/keySetup.js removes
@@ -921,9 +921,8 @@
   <!-- Loading screen -->
   <div id="loading-screen">
     <div class="loader-content">
-      <span class="loader-logo brand-logo" data-logo-gaze data-logo-src="/logo.svg" aria-hidden="true"><img src="/logo.svg" alt="" /></span>
-      <h2>THE O <span class="title-accent">EYE</span></h2>
-      <p class="loader-status">A carregar inteligência operacional...</p>
+      <span class="loader-logo brand-logo" aria-hidden="true"><img src="/the-o-mark.png" alt="" /></span>
+      <p class="loader-status">Loading operational intelligence...</p>
     </div>
   </div>
 
