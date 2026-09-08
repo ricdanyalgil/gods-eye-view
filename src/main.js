@@ -345,7 +345,7 @@ async function init() {
       const sphere = Cesium.BoundingSphere.fromPoints(positions);
       viewer.camera.flyToBoundingSphere(sphere, {
         duration: 0.85,
-        offset: new Cesium.HeadingPitchRange(0, -0.82, Math.max(7000, sphere.radius * 3.1)),
+        offset: new Cesium.HeadingPitchRange(0, -0.82, Math.max(7000, sphere.radius * 4.2)),
       });
     };
     missionControls?.querySelectorAll('[data-mission-zoom]').forEach((button) => {
