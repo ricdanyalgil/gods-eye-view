@@ -423,6 +423,9 @@ async function init() {
         }, event.origin);
       }, 80);
     });
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'the-o-eye:ready' }, '*');
+    }
 
   } catch (error) {
     console.error("God's Eye View initialization failed:", error);
