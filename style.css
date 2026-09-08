@@ -8107,7 +8107,14 @@ body:not(.ui-clean-view):not(.recording-mode) #cesium-credits {
   letter-spacing: 0.1rem;
 }
 
-#command-dock .gev-voice-error-dismiss {
+#command-dock .gev-voice-error-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+#command-dock .gev-voice-error-dismiss,
+#command-dock .gev-voice-error-retry {
   padding: 0.25rem 0.42rem;
   color: rgba(255, 220, 224, 0.72);
   background: rgba(255, 255, 255, 0.04);
@@ -8117,6 +8124,11 @@ body:not(.ui-clean-view):not(.recording-mode) #cesium-credits {
   font-size: 0.43rem;
   letter-spacing: 0.06rem;
   cursor: pointer;
+}
+
+#command-dock .gev-voice-error-retry {
+  color: rgba(137, 245, 255, 0.92);
+  border-color: rgba(0, 229, 255, 0.42);
 }
 
 #command-dock #gev-voice-error-detail {

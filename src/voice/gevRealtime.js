@@ -215,6 +215,8 @@ export function initGevVoiceCommands({ viewer, styleManager, dataManager, sceneD
     else controller.start({ pushToTalk: false });
   };
   ui.button.addEventListener('click', controller.buttonHandler);
+  controller.retryHandler = () => controller.start({ pushToTalk: false });
+  ui.retryButton?.addEventListener('click', controller.retryHandler);
   if (ui.tierButton) {
     controller.tierHandler = () => controller.toggleVoiceTier();
     ui.tierButton.addEventListener('click', controller.tierHandler);
@@ -266,6 +268,7 @@ export class GevRealtimeController {
     this.radioToolHandoffReservations = new Map();
     this.radioHandoffDeferredByReservation = false;
     this.buttonHandler = null;
+    this.retryHandler = null;
     this.tierHandler = null;
     this.annotationEventUnsubscribe = null;
     // Voice cost control. The tier is chosen BEFORE a session starts and is
@@ -506,7 +509,15 @@ export class GevRealtimeController {
       }
       const diagnostics = this.connectionDiagnostics();
       this.stop({ preserveStatus: true });
-      this.reportError('Realtime connection', error, diagnostics);
+      if (isMicrophonePermissionError(error)) {
+        this.reportError(
+          'Microphone access',
+          new Error('Permission blocked. Allow microphone access in Chrome site settings, then select TRY AGAIN.'),
+          { ...diagnostics, permission: 'microphone' },
+        );
+      } else {
+        this.reportError('Realtime connection', error, diagnostics);
+      }
     }
   }
 
@@ -851,6 +862,10 @@ export class GevRealtimeController {
     if (removeUi && this.ui?.button && this.buttonHandler) {
       this.ui.button.removeEventListener('click', this.buttonHandler);
       this.buttonHandler = null;
+    }
+    if (removeUi && this.ui?.retryButton && this.retryHandler) {
+      this.ui.retryButton.removeEventListener('click', this.retryHandler);
+      this.retryHandler = null;
     }
     if (removeUi && this.ui?.tierButton && this.tierHandler) {
       this.ui.tierButton.removeEventListener('click', this.tierHandler);
@@ -2404,6 +2419,17 @@ function createErrorRecord(source, error, extra = {}) {
   };
 }
 
+function isMicrophonePermissionError(error) {
+  const candidate = error?.error || error;
+  const name = String(candidate?.name || '').toLowerCase();
+  const message = String(candidate?.message || '').toLowerCase();
+  return name === 'notallowederror'
+    || name === 'permissiondeniederror'
+    || message.includes('permission denied')
+    || message.includes('permission dismissed')
+    || message.includes('not allowed');
+}
+
 function formatErrorForDisplay(record) {
   const primary = [record.source, record.message].filter(Boolean).join(': ');
   const state = [
@@ -2576,10 +2602,13 @@ function createVoiceControl({ reset = false } = {}) {
       <div class="gev-voice-error-tray" role="alert" aria-live="assertive">
         <div class="gev-voice-error-header">
           <span>VOICE SYSTEM ERROR</span>
-          <button class="gev-voice-error-dismiss" type="button">DISMISS</button>
+          <div class="gev-voice-error-actions">
+            <button class="gev-voice-error-retry" type="button">TRY AGAIN</button>
+            <button class="gev-voice-error-dismiss" type="button">DISMISS</button>
+          </div>
         </div>
         <div id="gev-voice-error-detail"></div>
-        <div class="gev-voice-error-hint">Check microphone permission and network access, then try again.</div>
+        <div class="gev-voice-error-hint">Chrome: site controls → Microphone → Allow. The investigation stays open while voice reconnects.</div>
       </div>
     `;
     const commandDock = document.getElementById('command-dock');
@@ -2604,6 +2633,7 @@ function createVoiceControl({ reset = false } = {}) {
     detail: root.querySelector('#gev-voice-detail'),
     helpDetail: root.querySelector('.gev-voice-help-detail'),
     errorDetail: root.querySelector('#gev-voice-error-detail'),
+    retryButton: root.querySelector('.gev-voice-error-retry'),
     tierButton: root.querySelector('#gev-voice-tier'),
     costValue: root.querySelector('#gev-voice-cost-value'),
   };
