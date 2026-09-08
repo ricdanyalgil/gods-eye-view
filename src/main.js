@@ -328,6 +328,95 @@ async function init() {
     };
     window.__godsEyeView.voiceCommands = initGevVoiceCommands({ viewer, styleManager, dataManager, sceneDirector, annotations });
 
+    // The trusted parent console (The O) can operate the embedded camera
+    // without reaching through the cross-origin iframe boundary. Framing is
+    // already restricted by GEV_FRAME_ANCESTORS; source validation below makes
+    // sure only the actual parent window can issue a camera command.
+    window.addEventListener('message', (event) => {
+      if (event.source !== window.parent) return;
+      if (event.data?.type === 'the-o-eye:annotate-route') {
+        const points = (Array.isArray(event.data?.points) ? event.data.points : [])
+          .map((target) => String(target || '').trim().slice(0, 200))
+          .filter(Boolean)
+          .slice(0, 6)
+          .map((target) => ({ target }));
+        if (points.length < 2) return;
+        const drawMissionRoute = async () => {
+          let cctvEnabled = false;
+          if (event.data?.enableCameras === true) {
+            dataManager.setLayerParams('cctv', {
+              coverageMode: 'on',
+              autoHop: false,
+              showProjection: true,
+            }, { origin: 'programmatic' });
+            cctvEnabled = await dataManager.setEnabled('cctv', true, { origin: 'programmatic' });
+          }
+          const result = await annotations.annotate([{
+            type: 'route',
+            label: String(event.data?.label || 'ILLUSTRATIVE PUBLIC ROUTE').slice(0, 120),
+            points,
+            mode: ['walking', 'cycling', 'driving'].includes(event.data?.mode) ? event.data.mode : 'driving',
+            color: 'warning',
+          }], { clearPrevious: true, persist: true, flyTo: true });
+          event.source?.postMessage?.({
+            type: 'the-o-eye:route-state',
+            result,
+            cctvEnabled,
+          }, event.origin);
+        };
+        drawMissionRoute().catch(() => {
+          event.source?.postMessage?.({
+            type: 'the-o-eye:route-state',
+            result: { ok: false },
+            cctvEnabled: false,
+          }, event.origin);
+        });
+        return;
+      }
+      if (event.data?.type === 'the-o-eye:speak-briefing') {
+        const briefing = String(event.data?.text || '').trim().slice(0, 7000);
+        const controller = window.__gevVoiceCommands;
+        if (!briefing || !controller) return;
+        const speak = async () => {
+          if (!controller.isActive?.()) await controller.start({ pushToTalk: false });
+          controller.sendTextCommand(`Read the following operational briefing aloud in English. Preserve the meaning, do not call tools, do not add facts, and do not execute map actions. Briefing:\n${briefing}`);
+          event.source?.postMessage?.({ type: 'the-o-eye:voice-state', ok: true }, event.origin);
+        };
+        speak().catch((error) => {
+          event.source?.postMessage?.({ type: 'the-o-eye:voice-state', ok: false, error: String(error?.message || error) }, event.origin);
+        });
+        return;
+      }
+      if (event.data?.type !== 'the-o-eye:camera-zoom') return;
+      const cartographic = viewer.camera.positionCartographic;
+      if (!cartographic) return;
+
+      const currentAltitude = Math.max(1, Number(cartographic.height) || 1);
+      const action = String(event.data?.action || '');
+      const requestedAltitude = Number(event.data?.altitude);
+      const targetAltitude = Math.max(100, Math.min(22_000_000,
+        action === 'reset' && Number.isFinite(requestedAltitude)
+          ? requestedAltitude
+          : action === 'in'
+            ? currentAltitude / 1.8
+            : action === 'out'
+              ? currentAltitude * 1.8
+              : currentAltitude
+      ));
+
+      viewer.camera.cancelFlight();
+      const distance = Math.abs(currentAltitude - targetAltitude);
+      if (targetAltitude < currentAltitude) viewer.camera.zoomIn(distance);
+      else if (targetAltitude > currentAltitude) viewer.camera.zoomOut(distance);
+      governorRequestRender('parent-camera-zoom');
+      window.setTimeout(() => {
+        event.source?.postMessage?.({
+          type: 'the-o-eye:camera-state',
+          altitude: Math.round(viewer.camera.positionCartographic?.height || targetAltitude),
+        }, event.origin);
+      }, 80);
+    });
+
   } catch (error) {
     console.error("God's Eye View initialization failed:", error);
     loaderStatus.textContent = `Error: ${describeError(error)}`;
