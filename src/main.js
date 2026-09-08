@@ -343,13 +343,20 @@ async function init() {
         if (points.length < 2) return;
         const drawMissionRoute = async () => {
           let cctvEnabled = false;
-          if (event.data?.enableCameras === true) {
+          const routeText = points.map(({ target }) => target.toLowerCase()).join(' ');
+          const publicCameraCoverage = [
+            'austin', 'london', 'los angeles', 'san diego', 'san francisco',
+            'sacramento', 'oakland', 'chula vista', 'california',
+          ].some((location) => routeText.includes(location));
+          if (event.data?.enableCameras === true && publicCameraCoverage) {
             dataManager.setLayerParams('cctv', {
               coverageMode: 'on',
               autoHop: false,
               showProjection: true,
             }, { origin: 'programmatic' });
             cctvEnabled = await dataManager.setEnabled('cctv', true, { origin: 'programmatic' });
+          } else if (event.data?.enableCameras === true) {
+            await dataManager.setEnabled('cctv', false, { origin: 'programmatic' });
           }
           const result = await annotations.annotate([{
             type: 'route',
