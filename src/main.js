@@ -336,10 +336,18 @@ async function init() {
       if (event.source !== window.parent) return;
       if (event.data?.type === 'the-o-eye:annotate-route') {
         const points = (Array.isArray(event.data?.points) ? event.data.points : [])
-          .map((target) => String(target || '').trim().slice(0, 200))
+          .map((point) => {
+            const target = String(typeof point === 'object' ? point?.target : point || '').trim().slice(0, 200);
+            if (!target) return null;
+            return {
+              target,
+              label: String(typeof point === 'object' ? point?.label || target : target).trim().slice(0, 120),
+              kind: String(typeof point === 'object' ? point?.kind || 'stop' : 'stop').trim().slice(0, 24),
+            };
+          })
           .filter(Boolean)
           .slice(0, 6)
-          .map((target) => ({ target }));
+          ;
         if (points.length < 2) return;
         const drawMissionRoute = async () => {
           let cctvEnabled = false;
@@ -361,13 +369,19 @@ async function init() {
           const result = await annotations.annotate([{
             type: 'route',
             label: String(event.data?.label || 'ILLUSTRATIVE PUBLIC ROUTE').slice(0, 120),
-            points,
+            points: points.map(({ target }) => ({ target })),
             mode: ['walking', 'cycling', 'driving'].includes(event.data?.mode) ? event.data.mode : 'driving',
             color: 'warning',
-          }], { clearPrevious: true, persist: true, flyTo: true });
+          }, ...points.map((point, index) => ({
+            type: 'pin',
+            target: point.target,
+            label: point.label,
+            color: point.kind === 'risk' ? 'red' : index === 0 ? 'cyan' : index === points.length - 1 ? 'amber' : 'warning',
+          }))], { clearPrevious: true, persist: true, flyTo: true });
+          const routeResult = result?.results?.[0];
           event.source?.postMessage?.({
             type: 'the-o-eye:route-state',
-            result,
+            result: { ...result, ok: routeResult?.ok === true },
             cctvEnabled,
           }, event.origin);
         };
