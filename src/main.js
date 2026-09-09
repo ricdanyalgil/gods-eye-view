@@ -403,6 +403,7 @@ async function init() {
           label: event.data?.label,
           points,
           mode: event.data?.mode,
+          intelligence: event.data?.intelligence,
         }, {
           broadcast: event.data?._missionContextRestore !== true,
           notifyHandler: false,
@@ -437,6 +438,12 @@ async function init() {
               await dataManager.setEnabled('traffic', false, { origin: 'programmatic' });
             }
           }
+          const intelligenceSignals = (Array.isArray(event.data?.intelligence?.liveSignals)
+            ? event.data.intelligence.liveSignals
+            : [])
+            .filter((signal) => Number.isFinite(Number(signal?.latitude)) && Number.isFinite(Number(signal?.longitude)))
+            .sort((left, right) => Number(right?.riskScore || 0) - Number(left?.riskScore || 0))
+            .slice(0, 8);
           const result = await annotations.annotate([{
             type: 'route',
             label: String(event.data?.label || 'ILLUSTRATIVE PUBLIC ROUTE').slice(0, 120),
@@ -450,6 +457,13 @@ async function init() {
             longitude: point.longitude,
             label: point.label,
             color: point.kind === 'risk' ? 'red' : index === 0 ? 'cyan' : index === points.length - 1 ? 'amber' : 'warning',
+          })), ...intelligenceSignals.map((signal) => ({
+            type: 'pin',
+            target: String(signal.label || 'COLLECTED SIGNAL').slice(0, 160),
+            latitude: Number(signal.latitude),
+            longitude: Number(signal.longitude),
+            label: `${Number(signal.riskScore || 0) >= 70 ? 'HIGH RISK' : 'OBSERVED'} · ${String(signal.label || 'SIGNAL').slice(0, 90)}`,
+            color: Number(signal.riskScore || 0) >= 70 ? 'red' : 'warning',
           }))], { clearPrevious: true, persist: true, flyTo: true });
           missionStopEntities.forEach((entity) => viewer.entities.remove(entity));
           missionStopEntities = points

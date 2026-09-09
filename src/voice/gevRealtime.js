@@ -1044,6 +1044,42 @@ export class GevRealtimeController {
       })
       .filter(Boolean)
       .slice(0, 6);
+    const intelligenceSource = payload?.intelligence && typeof payload.intelligence === 'object'
+      ? payload.intelligence
+      : {};
+    const stringList = (value, limit = 8) => (Array.isArray(value) ? value : [])
+      .map((item) => compactText(item, 360))
+      .filter(Boolean)
+      .slice(0, limit);
+    const liveSignals = (Array.isArray(intelligenceSource.liveSignals) ? intelligenceSource.liveSignals : [])
+      .map((signal) => {
+        const label = compactText(signal?.label, 120);
+        if (!label) return null;
+        const latitude = Number(signal?.latitude);
+        const longitude = Number(signal?.longitude);
+        return {
+          label,
+          summary: compactText(signal?.summary, 360),
+          category: compactText(signal?.category, 80),
+          riskScore: Number.isFinite(Number(signal?.riskScore)) ? Number(signal.riskScore) : null,
+          confidence: Number.isFinite(Number(signal?.confidence)) ? Number(signal.confidence) : null,
+          ...(Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {}),
+          sources: (Array.isArray(signal?.sources) ? signal.sources : []).slice(0, 3).map((source) => ({
+            platform: compactText(source?.platform, 40),
+            snippet: compactText(source?.snippet, 260),
+            createdAt: compactText(source?.createdAt, 48),
+            url: compactText(source?.url, 240),
+          })),
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 16);
+    const objectList = (value, limit = 8) => (Array.isArray(value) ? value : [])
+      .slice(0, limit)
+      .map((item) => Object.fromEntries(Object.entries(item || {}).map(([key, entry]) => [
+        key,
+        Array.isArray(entry) ? stringList(entry, 5) : compactText(entry, 300),
+      ])));
     this.missionContext = points.length >= 2 ? {
       type: 'the_o_mission_context',
       missionLabel: compactText(payload.label || payload.missionLabel || 'The O mission route', 160),
@@ -1051,6 +1087,18 @@ export class GevRealtimeController {
         ? (payload.mode || payload.routeMode)
         : 'driving',
       stops: points,
+      intelligence: {
+        investigationId: compactText(intelligenceSource.investigationId, 80),
+        updatedAt: compactText(intelligenceSource.updatedAt, 48),
+        routeSummary: compactText(intelligenceSource.routeSummary, 500),
+        riskPoints: stringList(intelligenceSource.riskPoints),
+        mitigations: stringList(intelligenceSource.mitigations),
+        alternatives: stringList(intelligenceSource.alternatives),
+        contingencyPlans: objectList(intelligenceSource.contingencyPlans, 3),
+        travelOptions: objectList(intelligenceSource.travelOptions, 9),
+        arrivalGateways: objectList(intelligenceSource.arrivalGateways, 5),
+        liveSignals,
+      },
     } : null;
     if (broadcast && this.missionContext) {
       this.missionContextChannel?.postMessage?.({
@@ -2725,7 +2773,7 @@ function createVoiceControl({ reset = false } = {}) {
         <div id="gev-voice-status">OFF</div>
         <div class="gev-voice-cost">
           <button id="gev-voice-tier" class="gev-voice-tier-btn" type="button" aria-pressed="false" title="Voice model tier — applies next session">STD</button>
-          <span id="gev-voice-cost-value" class="gev-voice-cost-value" data-level="ok" title="Estimated session cost">~$0.00</span>
+          <span id="gev-voice-cost-value" class="gev-voice-cost-value" data-level="ok" title="Estimated session cost" hidden aria-hidden="true">~$0.00</span>
         </div>
       </div>
       <button id="gev-voice-button" type="button" aria-label="Voice control — hold Space to speak; click to toggle voice" aria-describedby="gev-voice-help">

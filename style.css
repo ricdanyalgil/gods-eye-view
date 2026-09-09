@@ -8896,6 +8896,10 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
   transition: color var(--transition-fast);
 }
 
+.gev-voice-cost-value[hidden] {
+  display: none;
+}
+
 .gev-voice-cost-value[data-level='warn'] {
   color: #ffc46b;
 }
