@@ -389,6 +389,7 @@ export class GevRealtimeController {
     this.pendingViewportDeletes = new Set();
     this.missionContext = null;
     this.missionContextChannel = null;
+    this.missionContextHandler = null;
     this.errors = loadStoredErrors();
     this.sessionId = createDebugSessionId();
     this.debugLog('controller.created', { status: this.status });
@@ -1014,7 +1015,14 @@ export class GevRealtimeController {
     this.missionContextChannel.postMessage?.({ type: 'mission-context-request' });
   }
 
-  setMissionContext(payload = {}, { broadcast = true } = {}) {
+  setMissionContextHandler(handler) {
+    this.missionContextHandler = typeof handler === 'function' ? handler : null;
+    if (this.missionContext && this.missionContextHandler) {
+      this.missionContextHandler(this.missionContext);
+    }
+  }
+
+  setMissionContext(payload = {}, { broadcast = true, notifyHandler = true } = {}) {
     const sourcePoints = Array.isArray(payload.points)
       ? payload.points
       : Array.isArray(payload.stops)
@@ -1049,6 +1057,9 @@ export class GevRealtimeController {
         type: 'mission-context',
         context: this.missionContext,
       });
+    }
+    if (notifyHandler && this.missionContext) {
+      this.missionContextHandler?.(this.missionContext);
     }
     return this.sendMissionContext();
   }

@@ -3086,6 +3086,39 @@ test('mission context is shared with a standalone Eye tab without persistent sto
   assert.equal(posted[1].context.stops[1].target, 'Hotel de Russie');
 });
 
+test('received mission context can restore the standalone map without a broadcast loop', () => {
+  const restored = [];
+  const posted = [];
+  const channel = {
+    postMessage(message) { posted.push(message); },
+    close() {},
+  };
+  const controller = new GevRealtimeController({ ui: {}, runner: async () => ({}) });
+  controller.attachMissionContextChannel(channel);
+  controller.setMissionContextHandler((context) => restored.push(context));
+
+  channel.onmessage({
+    data: {
+      type: 'mission-context',
+      context: {
+        missionLabel: 'Rome visit',
+        routeMode: 'driving',
+        stops: [
+          { target: 'Rome Fiumicino Airport', role: 'ARRIVAL', latitude: 41.8003, longitude: 12.2389 },
+          { target: 'Hotel de Russie', role: 'CANDIDATE HOTEL', latitude: 41.9102, longitude: 12.4770 },
+        ],
+      },
+    },
+  });
+
+  assert.equal(restored.length, 1);
+  assert.equal(restored[0].stops[1].target, 'Hotel de Russie');
+  assert.deepEqual(posted, [{ type: 'mission-context-request' }], 'restoration does not rebroadcast');
+
+  controller.setMissionContext(restored[0], { broadcast: false, notifyHandler: false });
+  assert.equal(restored.length, 1, 'map restoration can retain context without recursively invoking itself');
+});
+
 test('mission route tools inherit trusted coordinates for named and deictic stops', () => {
   const mission = {
     stops: [

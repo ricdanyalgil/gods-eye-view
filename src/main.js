@@ -403,6 +403,9 @@ async function init() {
           label: event.data?.label,
           points,
           mode: event.data?.mode,
+        }, {
+          broadcast: event.data?._missionContextRestore !== true,
+          notifyHandler: false,
         });
         const drawMissionRoute = async () => {
           let cctvEnabled = false;
@@ -536,6 +539,26 @@ async function init() {
         }, event.origin);
       }, 80);
     });
+    if (window.parent === window) {
+      window.__gevVoiceCommands?.setMissionContextHandler?.((context) => {
+        window.postMessage({
+          type: 'the-o-eye:annotate-route',
+          _missionContextRestore: true,
+          label: context.missionLabel,
+          points: context.stops.map((stop) => ({
+            target: stop.target,
+            label: stop.role,
+            kind: 'stop',
+            latitude: stop.latitude,
+            longitude: stop.longitude,
+          })),
+          mode: context.routeMode,
+          enableCameras: true,
+          enableTraffic: true,
+          focusMode: 'locked',
+        }, window.location.origin);
+      });
+    }
     if (window.parent !== window) {
       window.parent.postMessage({ type: 'the-o-eye:ready' }, '*');
     }
