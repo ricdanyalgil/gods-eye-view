@@ -3021,6 +3021,70 @@ function textCommandController() {
   return { controller, sent };
 }
 
+test('mission context is retained and sent as structured system data', () => {
+  const sent = [];
+  const controller = new GevRealtimeController({ ui: {}, runner: async () => ({}) });
+  controller.dc = { readyState: 'open' };
+  controller.sendRealtimeEvent = (event, label) => {
+    sent.push({ event, label });
+    return true;
+  };
+  controller.setMissionContext({
+    label: 'Rome visit',
+    mode: 'driving',
+    points: [
+      { target: 'Rome Fiumicino Airport', label: 'ARRIVAL', latitude: 41.8003, longitude: 12.2389 },
+      { target: 'Hotel de Russie', label: 'CANDIDATE HOTEL', latitude: 41.9102, longitude: 12.4770 },
+      { target: 'Vatican City', label: 'EVENT / DESTINATION', latitude: 41.9029, longitude: 12.4534 },
+    ],
+  });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].label, 'client.map_event');
+  assert.equal(sent[0].event.item.role, 'system');
+  const payload = JSON.parse(sent[0].event.item.content[0].text);
+  assert.equal(payload.type, 'the_o_mission_context');
+  assert.equal(payload.routeMode, 'driving');
+  assert.deepEqual(payload.stops.map((point) => point.target), [
+    'Rome Fiumicino Airport',
+    'Hotel de Russie',
+    'Vatican City',
+  ]);
+  sent.length = 0;
+  controller.sendMissionContext();
+  assert.equal(sent.length, 1, 'a newly opened Realtime session can receive the retained context');
+});
+
+test('mission context is shared with a standalone Eye tab without persistent storage', () => {
+  const posted = [];
+  const channel = {
+    postMessage(message) { posted.push(message); },
+    close() {},
+  };
+  const controller = new GevRealtimeController({ ui: {}, runner: async () => ({}) });
+  controller.attachMissionContextChannel(channel);
+  assert.deepEqual(posted, [{ type: 'mission-context-request' }]);
+
+  channel.onmessage({
+    data: {
+      type: 'mission-context',
+      context: {
+        missionLabel: 'Rome visit',
+        routeMode: 'driving',
+        stops: [
+          { target: 'Rome Fiumicino Airport', role: 'ARRIVAL' },
+          { target: 'Hotel de Russie', role: 'CANDIDATE HOTEL' },
+        ],
+      },
+    },
+  });
+  assert.equal(controller.missionContext.stops[0].target, 'Rome Fiumicino Airport');
+  assert.equal(posted.length, 1, 'received context is not rebroadcast in a loop');
+
+  channel.onmessage({ data: { type: 'mission-context-request' } });
+  assert.equal(posted[1].type, 'mission-context');
+  assert.equal(posted[1].context.stops[1].target, 'Hotel de Russie');
+});
+
 test('a typed command mid-response defers its turn instead of colliding', () => {
   const { controller, sent } = textCommandController();
   controller.responseActive = true;

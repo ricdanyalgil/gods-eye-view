@@ -399,6 +399,11 @@ async function init() {
           .slice(0, 6)
           ;
         if (points.length < 2) return;
+        window.__gevVoiceCommands?.setMissionContext?.({
+          label: event.data?.label,
+          points,
+          mode: event.data?.mode,
+        });
         const drawMissionRoute = async () => {
           let cctvEnabled = false;
           let trafficEnabled = false;

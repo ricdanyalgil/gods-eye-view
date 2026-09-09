@@ -223,6 +223,9 @@ export function initGevVoiceCommands({ viewer, styleManager, dataManager, sceneD
   }
   controller.syncCostUi();
   controller.bindPushToTalkShortcut();
+  if (typeof BroadcastChannel === 'function') {
+    controller.attachMissionContextChannel(new BroadcastChannel('the-o-eye-mission-context.v1'));
+  }
   window.__gevVoiceCommands = controller;
   return controller;
 }
@@ -327,6 +330,8 @@ export class GevRealtimeController {
     // which case it replies with an item_not_found error echoing this id — a
     // benign race we must NOT treat as fatal (M14).
     this.pendingViewportDeletes = new Set();
+    this.missionContext = null;
+    this.missionContextChannel = null;
     this.errors = loadStoredErrors();
     this.sessionId = createDebugSessionId();
     this.debugLog('controller.created', { status: this.status });
@@ -455,6 +460,7 @@ export class GevRealtimeController {
           ? (this.pushToTalkKeyHeld ? 'Release Space to send' : 'Hold Space to talk')
           : 'Ask or command';
         this.setStatus('listening', detail);
+        this.sendMissionContext();
         this.debugLog('data_channel.open', { connection: this.connectionDiagnostics(dataChannel) });
       });
       dataChannel.addEventListener('message', (event) => this.handleRealtimeEvent(event));
@@ -901,6 +907,10 @@ export class GevRealtimeController {
       this.radioVisibilityUnsubscribe();
       this.radioVisibilityUnsubscribe = null;
     }
+    if (removeUi && this.missionContextChannel) {
+      this.missionContextChannel.close?.();
+      this.missionContextChannel = null;
+    }
     if (removeUi && this.ui?.root) {
       this.ui.root.remove();
     }
@@ -928,6 +938,67 @@ export class GevRealtimeController {
         content: [{ type: 'input_text', text: JSON.stringify(payload) }],
       },
     }, 'client.map_event');
+  }
+
+  attachMissionContextChannel(channel) {
+    this.missionContextChannel?.close?.();
+    this.missionContextChannel = channel || null;
+    if (!this.missionContextChannel) return;
+    this.missionContextChannel.onmessage = (event) => {
+      if (event?.data?.type === 'mission-context' && event.data.context) {
+        this.setMissionContext(event.data.context, { broadcast: false });
+      } else if (event?.data?.type === 'mission-context-request' && this.missionContext) {
+        this.missionContextChannel?.postMessage?.({
+          type: 'mission-context',
+          context: this.missionContext,
+        });
+      }
+    };
+    this.missionContextChannel.postMessage?.({ type: 'mission-context-request' });
+  }
+
+  setMissionContext(payload = {}, { broadcast = true } = {}) {
+    const sourcePoints = Array.isArray(payload.points)
+      ? payload.points
+      : Array.isArray(payload.stops)
+        ? payload.stops
+        : [];
+    const points = sourcePoints
+      .map((point) => {
+        const target = compactText(point?.target, 160);
+        if (!target) return null;
+        const latitude = Number(point?.latitude);
+        const longitude = Number(point?.longitude);
+        return {
+          target,
+          role: compactText(point?.label || point?.role || point?.kind || 'stop', 80),
+          ...(Number.isFinite(latitude) && Number.isFinite(longitude)
+            ? { latitude, longitude }
+            : {}),
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 6);
+    this.missionContext = points.length >= 2 ? {
+      type: 'the_o_mission_context',
+      missionLabel: compactText(payload.label || payload.missionLabel || 'The O mission route', 160),
+      routeMode: ['walking', 'cycling', 'driving'].includes(payload.mode || payload.routeMode)
+        ? (payload.mode || payload.routeMode)
+        : 'driving',
+      stops: points,
+    } : null;
+    if (broadcast && this.missionContext) {
+      this.missionContextChannel?.postMessage?.({
+        type: 'mission-context',
+        context: this.missionContext,
+      });
+    }
+    return this.sendMissionContext();
+  }
+
+  sendMissionContext() {
+    if (!this.missionContext) return false;
+    return this.notifyMapEvent(this.missionContext);
   }
 
   sendTextCommand(text) {
