@@ -112,6 +112,63 @@ export function writeStoredVoiceLimits(limits, storage) {
   return normalized;
 }
 
+function normalizeMissionReference(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/** Fill route waypoints from trusted The O mission stops before geocoding. */
+export function enrichMissionRouteArguments(toolName, args, missionContext) {
+  if (toolName !== 'annotate_map' || !missionContext?.stops || !Array.isArray(args?.annotations)) return args;
+  const findStop = (target) => {
+    const wanted = normalizeMissionReference(target);
+    if (!wanted) return null;
+    const exact = missionContext.stops.find((stop) => normalizeMissionReference(stop.target) === wanted);
+    if (exact) return exact;
+    const semanticRole = wanted === 'airport' || wanted === 'the airport' || wanted === 'arrival'
+      ? /arrival|airport/
+      : wanted === 'hotel' || wanted === 'the hotel'
+        ? /hotel/
+        : wanted === 'destination' || wanted === 'the destination' || wanted === 'venue' || wanted === 'the venue'
+          ? /destination|event|venue/
+          : null;
+    if (semanticRole) {
+      return missionContext.stops.find((stop) => semanticRole.test(
+        `${normalizeMissionReference(stop.role)} ${normalizeMissionReference(stop.target)}`
+      )) || null;
+    }
+    if (wanted.length < 6) return null;
+    return missionContext.stops.find((stop) => {
+      const candidate = normalizeMissionReference(stop.target);
+      return candidate.includes(wanted) || wanted.includes(candidate);
+    }) || null;
+  };
+  return {
+    ...args,
+    annotations: args.annotations.map((annotation) => {
+      if (annotation?.type !== 'route' || !Array.isArray(annotation.points)) return annotation;
+      return {
+        ...annotation,
+        points: annotation.points.map((point) => {
+          if (!point || typeof point !== 'object') return point;
+          if (Number.isFinite(Number(point.latitude)) && Number.isFinite(Number(point.longitude))) return point;
+          const stop = findStop(point.target);
+          if (!stop || !Number.isFinite(Number(stop.latitude)) || !Number.isFinite(Number(stop.longitude))) return point;
+          return {
+            ...point,
+            latitude: Number(stop.latitude),
+            longitude: Number(stop.longitude),
+          };
+        }),
+      };
+    }),
+  };
+}
+
 /** Return whether a voice transition should pause Radio playback. */
 export function shouldPauseRadioForVoice({
   status = 'idle',
@@ -1249,7 +1306,11 @@ export class GevRealtimeController {
       let radioReservationToken = null;
       let isRadioFeatureCall = call.name === 'control_radio';
       try {
-        const parsedArguments = parseArguments(call.arguments);
+        const parsedArguments = enrichMissionRouteArguments(
+          call.name,
+          parseArguments(call.arguments),
+          this.missionContext,
+        );
         const isRadioControlCall = call.name === 'control_radio';
         const isRadioVisibilityCall = call.name === 'set_layer_visibility'
           && parsedArguments.layerId === 'radio';

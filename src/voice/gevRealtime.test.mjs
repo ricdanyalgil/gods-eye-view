@@ -10,6 +10,7 @@ import {
   renderFreshCesiumFrame,
   estimateDataUrlBytes,
   GevRealtimeController,
+  enrichMissionRouteArguments,
   gateVoiceVisualizerLevel,
   isBenignViewportDeleteError,
   isPushToTalkKey,
@@ -3083,6 +3084,27 @@ test('mission context is shared with a standalone Eye tab without persistent sto
   channel.onmessage({ data: { type: 'mission-context-request' } });
   assert.equal(posted[1].type, 'mission-context');
   assert.equal(posted[1].context.stops[1].target, 'Hotel de Russie');
+});
+
+test('mission route tools inherit trusted coordinates for named and deictic stops', () => {
+  const mission = {
+    stops: [
+      { target: 'Rome Fiumicino Airport', role: 'ARRIVAL', latitude: 41.8003, longitude: 12.2389 },
+      { target: 'Hotel de Russie', role: 'CANDIDATE HOTEL', latitude: 41.9102, longitude: 12.4770 },
+      { target: 'Vatican City', role: 'EVENT / DESTINATION', latitude: 41.9029, longitude: 12.4534 },
+    ],
+  };
+  const enriched = enrichMissionRouteArguments('annotate_map', {
+    annotations: [{
+      type: 'route',
+      points: [{ target: 'the airport' }, { target: 'Hotel de Russie' }],
+      mode: 'driving',
+    }],
+  }, mission);
+  assert.deepEqual(enriched.annotations[0].points, [
+    { target: 'the airport', latitude: 41.8003, longitude: 12.2389 },
+    { target: 'Hotel de Russie', latitude: 41.9102, longitude: 12.4770 },
+  ]);
 });
 
 test('a typed command mid-response defers its turn instead of colliding', () => {
