@@ -3055,7 +3055,7 @@ test('mission context is retained and sent as structured system data', () => {
   assert.equal(sent.length, 1, 'a newly opened Realtime session can receive the retained context');
 });
 
-test('mission context is shared with a standalone Eye tab without persistent storage', () => {
+test('mission context is shared with a standalone Eye tab and persisted for reload recovery', () => {
   const posted = [];
   const channel = {
     postMessage(message) { posted.push(message); },

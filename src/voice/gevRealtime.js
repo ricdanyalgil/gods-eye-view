@@ -11,6 +11,7 @@ import {
 } from './voiceCost.js';
 
 const TOKEN_URL = '/api/realtime/token';
+const MISSION_CONTEXT_STORAGE_KEY = 'the-o-eye-mission-context.v1';
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
 const STATUS = {
   idle: 'OFF',
@@ -440,32 +441,6 @@ export class GevRealtimeController {
     let localStream = null;
     let localPc = null;
     try {
-      const minted = await fetchRealtimeToken(this.voiceTier);
-      const token = minted.token;
-      if (this.abandonStart(epoch, { localStream, localPc })) return;
-      // Bind the session meter to the model actually served. An env override
-      // (OPENAI_REALTIME_MODEL[_MINI]) can point a tier at a different model,
-      // and pricing by the tier we asked for would then under-meter and let the
-      // cap be overrun. Unrecognised ids bill at worst-case rates.
-      this.costTracker = createVoiceCostTracker({
-        modelId: minted.model || resolveVoiceModel(this.voiceTier).id,
-        limits: this.voiceLimits,
-      });
-      const costState = this.costTracker.state();
-      if (!costState.ratesRecognized) {
-        console.warn(
-          `[GEV voice] unrecognised Realtime model "${costState.modelId}" — `
-          + 'billing this session at the most expensive known rates. Update the '
-          + 'rate table in src/voice/voiceCost.js.'
-        );
-      }
-      this.syncCostUi();
-      this.debugLog('session.token.ready', {
-        hasToken: Boolean(token),
-        servedModel: minted.model || null,
-        servedTier: minted.tier || null,
-        ratesRecognized: costState.ratesRecognized,
-      });
       localStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -538,6 +513,37 @@ export class GevRealtimeController {
       const offer = await this.pc.createOffer();
       await this.pc.setLocalDescription(offer);
       if (this.abandonStart(epoch, { localStream, localPc })) return;
+      // Ephemeral Realtime credentials have a deliberately short lifetime.
+      // Mint only after Chrome has granted microphone access and the SDP offer
+      // is ready; a user may leave the permission prompt open long enough for a
+      // token minted before getUserMedia() to expire.
+      this.setStatus('connecting', 'Securing realtime session');
+      const minted = await fetchRealtimeToken(this.voiceTier);
+      const token = minted.token;
+      if (this.abandonStart(epoch, { localStream, localPc })) return;
+      // Bind the session meter to the model actually served. An env override
+      // (OPENAI_REALTIME_MODEL[_MINI]) can point a tier at a different model,
+      // and pricing by the tier we asked for would then under-meter and let the
+      // cap be overrun. Unrecognised ids bill at worst-case rates.
+      this.costTracker = createVoiceCostTracker({
+        modelId: minted.model || resolveVoiceModel(this.voiceTier).id,
+        limits: this.voiceLimits,
+      });
+      const costState = this.costTracker.state();
+      if (!costState.ratesRecognized) {
+        console.warn(
+          `[GEV voice] unrecognised Realtime model "${costState.modelId}" — `
+          + 'billing this session at the most expensive known rates. Update the '
+          + 'rate table in src/voice/voiceCost.js.'
+        );
+      }
+      this.syncCostUi();
+      this.debugLog('session.token.ready', {
+        hasToken: Boolean(token),
+        servedModel: minted.model || null,
+        servedTier: minted.tier || null,
+        ratesRecognized: costState.ratesRecognized,
+      });
       this.debugLog('webrtc.offer.created', {
         sdpLength: offer.sdp?.length || 0,
         connection: this.connectionDiagnostics(),
@@ -1013,6 +1019,16 @@ export class GevRealtimeController {
       }
     };
     this.missionContextChannel.postMessage?.({ type: 'mission-context-request' });
+    if (!this.missionContext) {
+      try {
+        const stored = JSON.parse(safeLocalStorage()?.getItem(MISSION_CONTEXT_STORAGE_KEY) || 'null');
+        if (stored?.stops?.length >= 2) {
+          this.setMissionContext(stored, { broadcast: false });
+        }
+      } catch {
+        // Storage is best-effort; malformed or blocked state must not stop Eye.
+      }
+    }
   }
 
   setMissionContextHandler(handler) {
@@ -1100,6 +1116,13 @@ export class GevRealtimeController {
         liveSignals,
       },
     } : null;
+    try {
+      const storage = safeLocalStorage();
+      if (this.missionContext) storage?.setItem(MISSION_CONTEXT_STORAGE_KEY, JSON.stringify(this.missionContext));
+      else storage?.removeItem(MISSION_CONTEXT_STORAGE_KEY);
+    } catch {
+      // Persistence is a convenience; map and voice continue in-memory.
+    }
     if (broadcast && this.missionContext) {
       this.missionContextChannel?.postMessage?.({
         type: 'mission-context',
